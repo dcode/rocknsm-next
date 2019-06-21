@@ -1,0 +1,8 @@
+packer_cache
+*.raw.gz
+*.ova
+config/id_*
+*.bak
+*.out
+vars.json
+http/*

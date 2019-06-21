@@ -1,0 +1,138 @@
+---
+passwd:
+  users:
+    - name: admin
+      groups: [wheel, docker]
+      password_hash: $6$rounds=656000$Rh6KczlGJCwYwW/w$CINk9PXWge4sFA2.eS0WkG4b39dBI6sBAP4pQqh9H2dDkvWm8A8F9SmvRXCKczMWIz6ENAuknMKu8w9Gz9eaz.
+      ssh_authorized_keys:
+        - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICwT6GHybCv3jlDEBFC9KaprgDaM+Ka6rwC6VgdIPBWz development_key"
+systemd:
+  units:
+    - name: metadata.target
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Metadata boot target
+        After=network-online.target rescue.service rescue.target
+        AllowIsolate=no
+        Requires=network-online.target
+
+        [Install]
+        RequiredBy=multi-user.target
+
+    - name: afterburn.service
+      enabled: true
+      dropins:
+        - name: baremetal-provider.conf
+          contents: |
+            [Service]
+            Type=oneshot
+            Environment=ATTRIBUTES=/run/metadata/afterburn
+            ExecStart=
+            ExecStart=/usr/bin/mkdir --parent /run/metadata
+            ExecStart=/usr/bin/bash -c 'echo -e "AFTERBURN_CUSTOM_PRIVATE_IPV4=$(ip route get $(ip route get 1.1.1.1 | cut -d"'" "'" -f3)|head -1|cut -d"'" "'" -f5)" >> ${ATTRIBUTES}'
+            ExecStart=/usr/bin/bash -c 'echo -e "AFTERBURN_CUSTOM_PUBLIC_IPV4=$(dig +short myip.opendns.com @resolver1.opendns.com)" >> ${ATTRIBUTES}'
+
+    - name: vmtoolsd.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Service for virtual machines hosted on VMware
+        Documentation=http://github.com/vmware/open-vm-tools
+        ConditionVirtualization=vmware
+        Requires=metadata.target
+        After=metadata.target
+
+        [Service]
+        Type=simple
+        TimeoutStartSec=30s
+        EnvironmentFile=/run/metadata/afterburn
+        ExecStartPre=-/usr/bin/podman rm "vmtoolsd-service"
+        ExecStart=/usr/bin/podman run --name "vmtoolsd-service" \
+          --privileged -v /:/host -v /proc/:/hostproc/ \
+          -v /sys/fs/cgroup:/sys/fs/cgroup  -v /var/log:/var/log \
+          -v /run/systemd:/run/systemd -v /sysroot:/sysroot \
+          -v /var/lib/sss/pipes/:/var/lib/sss/pipes/ \
+          -v /etc/passwd:/etc/passwd -v /etc/shadow:/etc/shadow \
+          -v /tmp:/tmp -v /etc/sysconfig:/etc/sysconfig \
+          -v /etc/resolv.conf:/etc/resolv.conf \
+          -v /etc/nsswitch.conf:/etc/nsswitch.conf -v /etc/hosts:/etc/hosts \
+          -v /etc/hostname:/etc/hostname -v /etc/adjtime:/etc/adjtime \
+          --env container=docker --net=host --pid=host  192.168.100.1:5000/open-vm-tools-fedora:30
+        ExecReload=-/usr/bin/podman stop "vmtoolsd-service"
+        ExecReload=-/usr/bin/podman rm "vmtoolsd-service"
+        ExecStop=-/usr/bin/podman stop "vmtoolsd-service"
+        TimeoutStopSec=5
+        PrivateTmp=true
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: consul.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Consul for service discovery and configuration
+        Documentation=https://hub.docker.com/_/consul
+        Requires=metadata.target
+        After=metadata.target
+
+        [Service]
+        Type=simple
+        TimeoutStartSec=5m
+        Environment=CONTAINER=docker.io/library/consul
+        Environment=TAG=1.5.1
+        EnvironmentFile=/run/metadata/afterburn
+        ExecStartPre=-/usr/bin/mkdir --parents /etc/consul
+        ExecStartPre=-/usr/bin/podman rm "consul-service"
+
+        ExecStart=/usr/bin/podman run --name consul-service \
+          --net=host --volume=consul_data:/consul/data \
+          --volume=/etc/consul:/consul/config:Z \
+          "${CONTAINER}":"${TAG}" agent -dev -bind=${AFTERBURN_CUSTOM_PRIVATE_IPV4}
+
+        ExecReload=-/usr/bin/podman stop "consul-service"
+        ExecReload=-/usr/bin/podman rm "consul-service"
+        ExecStop=-/usr/bin/podman stop "consul-service"
+        TimeoutStopSec=5
+        Restart=always
+        RestartSec=30
+
+        [Install]
+        WantedBy=multi-user.target
+
+storage:
+  files:
+    - path: /etc/sysctl.d/filter_console_message.conf
+      filesystem: root
+      contents:
+        inline: "kernel.printk=3 4 1 3"
+      mode: 0644
+      user:
+        id: 0
+      group:
+        id: 0
+    - path: /etc/sysctl.d/max_mem_count.conf
+      filesystem: root
+      contents:
+        inline: vm.max_map_count=262144
+      mode: 0644
+      user:
+        id: 0
+      group:
+        id: 0
+    - path: /etc/containers/registries.conf
+      filesystem: root
+      overwrite: true
+      contents:
+        local: registries.conf
+      mode: 0644
+      user:
+        id: 0
+      group:
+        id: 0
+    - path: "/etc/hostname"
+      filesystem: root
+      mode: 0644
+      contents:
+          inline: rock3dev

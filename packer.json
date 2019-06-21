@@ -1,0 +1,123 @@
+{
+    "builders": [
+        {
+            "CPU_limit": -1,
+            "CPUs": "{{user `cpu`}}",
+            "RAM": "{{user `memory`}}",
+            "RAM_reserve_all": true,
+            "boot_command": [
+                "<up><wait><tab> ",
+                "<leftCtrlOn>w<leftCtrlOff>",
+                "inst.ks=hd:/dev/fd0:/ks.cfg ",
+                "biosdevname=0 ",
+                "net.ifnames=0 ",
+                "inst.text",
+                "<enter><wait>"
+            ],
+            "boot_wait": "10s",
+            "cluster": "{{ user `esxi_cluster` }}",
+            "communicator": "ssh",
+            "convert_to_template": true,
+            "datacenter": "{{ user `vcenter_datacenter` }}",
+            "datastore": "{{ user `vcenter_datastore` }}",
+            "disk_controller_type": "pvscsi",
+            "disk_size": "{{user `disk_size`}}",
+            "disk_thin_provisioned": true,
+            "guest_os_type": "centos7_64Guest",
+            "host": "{{ user `esxi_host` }}",
+            "insecure_connection": true,
+            "iso_checksum": "{{user `iso_checksum`}}",
+            "iso_checksum_type": "{{user `iso_checksum_type`}}",
+            "iso_urls": [
+                "{{user `mirror`}}/{{user `mirror_directory`}}/{{user `iso_name`}}"
+            ],
+            "network": "{{ user `vcenter_network` }}",
+            "network_card": "vmxnet3",
+            "password": "{{ user `vcenter_password` }}",
+            "shutdown_command": "echo 'admin'|sudo -S /sbin/halt -h -p",
+            "ssh_port": 22,
+            "ssh_timeout": "10m",
+            "ssh_username": "admin",
+            "type": "vsphere-iso",
+            "username": "{{ user `vcenter_username` }}",
+            "vcenter_server": "{{ user `vcenter_server` }}",
+            "vm_name": "{{user `template`}}-bios",
+            "vm_version": 13
+        },
+        {
+            "type": "vmware-iso",
+            "vm_name": "coreos-{{ user `artifact_version` }}-bios",
+            "cpus": "{{user `cpu`}}",
+            "guest_os_type": "centos7-64",
+            "headless": "{{ user `headless` }}",
+            "disk_size": "{{user `disk_size`}}",
+            "memory": "{{user `memory`}}",
+            "network": "nat",
+            "network_adapter_type": "vmxnet3",
+            "http_directory": "http",
+            "vmx_data": {
+                "serial0.filename":  "/tmp/serial0",
+                "serial0.filetype":  "pipe",
+                "serial0.present": "TRUE",
+                "serial0.startconnected":  "TRUE"
+            },
+            "boot_command": [
+                "<up><wait><tab><wait><wait><wait><wait><wait> ",
+                "console=tty0 console=ttyS0,115200n8 ",
+                "coreos.inst.image_url={{ .HTTPIP }}:{{ .HTTPPort }}/{{ user `metal_name` }} ",
+                "coreos.inst.install_dev=sda ",
+                "coreos.inst.ignition_url={{ .HTTPIP }}:{{ .HTTPPort }}/config.ign ",
+                "<enter><wait>"
+            ],
+            "boot_wait": "2s",
+            "iso_checksum": "{{user `iso_checksum`}}",
+            "iso_checksum_type": "{{user `iso_checksum_type`}}",
+            "iso_urls": [
+                "{{user `artifact_baseurl`}}/{{user `artifact_version`}}/{{user `iso_name`}}"
+            ],
+            "communicator": "ssh",
+            "ssh_port": 22,
+            "ssh_timeout": "30m",
+            "ssh_username": "admin",
+            "ssh_private_key_file": "config/id_ed25519",
+            "shutdown_command": "sudo /sbin/halt -h -p"
+        }
+    ],
+    "post-processors": [
+    ],
+    "provisioners": [
+        { "type": "shell-local", "inline": ["while 1; do sleep 300; done"] }
+    ],
+    "variables": {
+        "build_timestamp": "{{isotime \"20060102150405\"}}",
+        "cpu": "2",
+        "memory": "1024",
+        "disk_size": "65536",
+        "disk_type_id": "1",
+        "esxi_cluster": "",
+        "esxi_host": "",
+        "git_revision": "__unknown_git_revision__",
+        "guest_additions_mode": "disable",
+        "headless": "true",
+        "http_proxy": "{{env `http_proxy`}}",
+        "https_proxy": "{{env `https_proxy`}}",
+
+        "_comment": "These variables are provided by vars.json",
+        "artifact_baseurl": "",
+        "iso_name": "",
+        "iso_checksum": "",
+        "iso_checksum_type": "",
+        "artifact_version": "",
+        "metal_name": "",
+        "metal_checksum": "",
+                
+        "no_proxy": "{{env `no_proxy`}}",
+
+        "vcenter_datacenter": "",
+        "vcenter_datastore": "",
+        "vcenter_network": "",
+        "vcenter_password": "{{ env `VMWARE_PASSWORD`}}",
+        "vcenter_server": "",
+        "vcenter_username": "{{ env `VMWARE_USERNAME`}}"
+    }
+}
